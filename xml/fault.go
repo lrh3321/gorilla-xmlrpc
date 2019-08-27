@@ -6,6 +6,7 @@ package xml
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Default Faults
@@ -33,11 +34,11 @@ func (f Fault) Error() string {
 
 // Fault2XML is a quick 'marshalling' replacemnt for the Fault case.
 func fault2XML(fault Fault) string {
-	buffer := "<methodResponse><fault>"
-	xml, _ := rpc2XML(fault)
-	buffer += xml
-	buffer += "</fault></methodResponse>"
-	return buffer
+	buffer := new(strings.Builder)
+	buffer.WriteString("<methodResponse><fault>")
+	rpc2XML(buffer, fault)
+	buffer.WriteString("</fault></methodResponse>")
+	return buffer.String()
 }
 
 type faultValue struct {

@@ -7,74 +7,100 @@ package xml
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"time"
 )
 
-func rpcRequest2XML(method string, rpc interface{}) (string, error) {
-	buffer := "<methodCall><methodName>"
-	buffer += method
-	buffer += "</methodName>"
-	params, err := rpcParams2XML(rpc)
-	buffer += params
-	buffer += "</methodCall>"
-	return buffer, err
+type stringWriter interface {
+	io.Writer
+	io.StringWriter
 }
 
-func rpcResponse2XML(rpc interface{}) (string, error) {
-	buffer := "<methodResponse>"
-	params, err := rpcParams2XML(rpc)
-	buffer += params
-	buffer += "</methodResponse>"
-	return buffer, err
+func rpcRequest2XML(method string, rpc ...interface{}) (string, error) {
+	buffer := new(strings.Builder)
+	buffer.WriteString("<methodCall><methodName>")
+
+	buffer.WriteString(method)
+	buffer.WriteString("</methodName>")
+	err := rpcParams2XML(buffer, rpc...)
+	buffer.WriteString("</methodCall>")
+	return buffer.String(), err
 }
 
-func rpcParams2XML(rpc interface{}) (string, error) {
+func rpcResponse2XML(rpc ...interface{}) (string, error) {
+	buffer := new(strings.Builder)
+	buffer.WriteString("<methodResponse>")
+	err := rpcParams2XML(buffer, rpc...)
+	buffer.WriteString("</methodResponse>")
+	return buffer.String(), err
+}
+
+func rpcParams2XML(buffer stringWriter, rpc ...interface{}) error {
 	var err error
-	buffer := "<params>"
-	for i := 0; i < reflect.ValueOf(rpc).Elem().NumField(); i++ {
-		var xml string
-		buffer += "<param>"
-		xml, err = rpc2XML(reflect.ValueOf(rpc).Elem().Field(i).Interface())
-		buffer += xml
-		buffer += "</param>"
+	buffer.WriteString("<params>")
+
+	var elem reflect.Value
+	for _, r := range rpc {
+		val := reflect.ValueOf(r)
+		switch val.Kind() {
+		case reflect.Interface, reflect.Ptr:
+			elem = val.Elem()
+		default:
+			elem = val
+		}
+		if elem.Kind() != reflect.Struct {
+			buffer.WriteString("<param>")
+			err = rpc2XML(buffer, elem.Interface())
+			buffer.WriteString("</param>")
+			continue
+		}
+
+		numField := elem.NumField()
+
+		for i := 0; i < numField; i++ {
+			buffer.WriteString("<param>")
+			err = rpc2XML(buffer, elem.Field(i).Interface())
+			buffer.WriteString("</param>")
+		}
 	}
-	buffer += "</params>"
-	return buffer, err
+
+	buffer.WriteString("</params>")
+	return err
 }
 
-func rpc2XML(value interface{}) (string, error) {
-	out := "<value>"
+func rpc2XML(w stringWriter, value interface{}) error {
+	w.WriteString("<value>")
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Int:
-		out += fmt.Sprintf("<int>%d</int>", value.(int))
+		fmt.Fprintf(w, "<int>%d</int>", value.(int))
 	case reflect.Float64:
-		out += fmt.Sprintf("<double>%f</double>", value.(float64))
+		fmt.Fprintf(w, "<double>%f</double>", value.(float64))
 	case reflect.String:
-		out += string2XML(value.(string))
+		w.Write([]byte(string2XML(value.(string))))
 	case reflect.Bool:
-		out += bool2XML(value.(bool))
+		w.Write([]byte(bool2XML(value.(bool))))
 	case reflect.Struct:
 		if reflect.TypeOf(value).String() != "time.Time" {
-			out += struct2XML(value)
+			struct2XML(w, value)
 		} else {
-			out += time2XML(value.(time.Time))
+			w.Write([]byte(time2XML(value.(time.Time))))
 		}
 	case reflect.Slice, reflect.Array:
 		// FIXME: is it the best way to recognize '[]byte'?
 		if reflect.TypeOf(value).String() != "[]uint8" {
-			out += array2XML(value)
+			array2XML(w, value)
 		} else {
-			out += base642XML(value.([]byte))
+			w.WriteString(base642XML(value.([]byte)))
 		}
 	case reflect.Ptr:
 		if reflect.ValueOf(value).IsNil() {
-			out += "<nil/>"
+			w.WriteString("<nil/>")
 		}
 	}
-	out += "</value>"
-	return out, nil
+	w.WriteString("</value>")
+	return nil
 }
 
 func bool2XML(value bool) string {
@@ -95,33 +121,32 @@ func string2XML(value string) string {
 	return fmt.Sprintf("<string>%s</string>", value)
 }
 
-func struct2XML(value interface{}) (out string) {
-	out += "<struct>"
+func struct2XML(w stringWriter, value interface{}) {
+	w.WriteString("<struct>")
 	for i := 0; i < reflect.TypeOf(value).NumField(); i++ {
 		field := reflect.ValueOf(value).Field(i)
-		field_type := reflect.TypeOf(value).Field(i)
+		fieldType := reflect.TypeOf(value).Field(i)
 		var name string
-		if field_type.Tag.Get("xml") != "" {
-			name = field_type.Tag.Get("xml")
+		if fieldType.Tag.Get("xml") != "" {
+			name = fieldType.Tag.Get("xml")
 		} else {
-			name = field_type.Name
+			name = fieldType.Name
 		}
-		field_value, _ := rpc2XML(field.Interface())
-		field_name := fmt.Sprintf("<name>%s</name>", name)
-		out += fmt.Sprintf("<member>%s%s</member>", field_name, field_value)
+		w.WriteString("<member>")
+		fmt.Fprintf(w, "<name>%s</name>", name)
+		rpc2XML(w, field.Interface())
+		w.WriteString("</member>")
 	}
-	out += "</struct>"
+	w.WriteString("</struct>")
 	return
 }
 
-func array2XML(value interface{}) (out string) {
-	out += "<array><data>"
+func array2XML(w stringWriter, value interface{}) {
+	w.WriteString("<array><data>")
 	for i := 0; i < reflect.ValueOf(value).Len(); i++ {
-		item_xml, _ := rpc2XML(reflect.ValueOf(value).Index(i).Interface())
-		out += item_xml
+		rpc2XML(w, reflect.ValueOf(value).Index(i).Interface())
 	}
-	out += "</data></array>"
-	return
+	w.WriteString("</data></array>")
 }
 
 func time2XML(t time.Time) string {

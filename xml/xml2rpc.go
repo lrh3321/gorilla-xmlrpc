@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/rogpeppe/go-charset/charset"
+
+	//
 	_ "github.com/rogpeppe/go-charset/data"
 )
 
@@ -62,15 +64,18 @@ func xml2RPC(xmlraw string, rpc interface{}) error {
 		return getFaultResponse(ret.Fault)
 	}
 
+	typ := reflect.TypeOf(rpc).Elem()
+
 	// Structures should have equal number of fields
-	if reflect.TypeOf(rpc).Elem().NumField() != len(ret.Params) {
+	if typ.NumField() < len(ret.Params) {
 		return FaultWrongArgumentsNumber
 	}
 
 	// Now, convert temporal structure into the
 	// passed rpc variable, according to it's structure
+	elem := reflect.ValueOf(rpc).Elem()
 	for i, param := range ret.Params {
-		field := reflect.ValueOf(rpc).Elem().Field(i)
+		field := elem.Field(i)
 		err = value2Field(param.Value, &field)
 		if err != nil {
 			return err
@@ -136,10 +141,20 @@ func value2Field(value value, field *reflect.Value) error {
 		for i := 0; i < len(s); i++ {
 			// Uppercase first letter for field name to deal with
 			// methods in lowercase, which cannot be used
-			field_name := uppercaseFirst(s[i].Name)
-			f := field.FieldByName(field_name)
+			fieldName := captionString(s[i].Name)
+			f := field.FieldByName(fieldName)
+			if !f.CanSet() {
+				excepted := strings.ToLower(s[i].Name)
+				f = field.FieldByNameFunc(func(s string) bool {
+					if strings.ToLower(s) == excepted {
+						return unicode.IsUpper(rune(s[0]))
+					}
+					return false
+				})
+			}
 			err = value2Field(s[i].Value, &f)
 		}
+	case len(value.Array) == 0:
 	case len(value.Array) != 0:
 		a := value.Array
 		f := *field
@@ -158,7 +173,12 @@ func value2Field(value value, field *reflect.Value) error {
 		// value field is default to string, see http://en.wikipedia.org/wiki/XML-RPC#Data_types
 		// also can be <nil/>
 		if value.Raw != "<nil/>" {
-			val = value.Raw
+			v := value.Raw
+			v = strings.TrimSpace(v)
+			if v == "<string></string>" {
+				v = ""
+			}
+			val = v
 		}
 	}
 
@@ -204,7 +224,19 @@ func xml2Base64(value string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(value)
 }
 
-func uppercaseFirst(in string) (out string) {
-	r, n := utf8.DecodeRuneInString(in)
-	return string(unicode.ToUpper(r)) + in[n:]
+func captionString(in string) (out string) {
+	chars := make([]rune, 0, len(in))
+	flag := true
+	for _, r := range in {
+		if r == '_' {
+			flag = true
+			continue
+		} else if flag {
+			r = unicode.ToUpper(r)
+			flag = false
+		}
+		chars = append(chars, r)
+	}
+
+	return string(chars)
 }

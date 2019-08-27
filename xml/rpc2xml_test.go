@@ -9,24 +9,24 @@ import (
 	"time"
 )
 
-type SubStructRpc2Xml struct {
+type SubStructRPC2XML struct {
 	Foo  int
 	Bar  string
 	Data []int
 }
 
-type StructRpc2Xml struct {
+type StructRPC2XML struct {
 	Int    int
 	Float  float64
 	Str    string
 	Bool   bool
-	Sub    SubStructRpc2Xml
+	Sub    SubStructRPC2XML
 	Time   time.Time
 	Base64 []byte
 }
 
 func TestRPC2XML(t *testing.T) {
-	req := &StructRpc2Xml{123, 3.145926, "Hello, World!", false, SubStructRpc2Xml{42, "I'm Bar", []int{1, 2, 3}}, time.Date(2012, time.July, 17, 14, 8, 55, 0, time.Local), []byte("you can't read this!")}
+	req := &StructRPC2XML{123, 3.145926, "Hello, World!", false, SubStructRPC2XML{42, "I'm Bar", []int{1, 2, 3}}, time.Date(2012, time.July, 17, 14, 8, 55, 0, time.Local), []byte("you can't read this!")}
 	xml, err := rpcRequest2XML("Some.Method", req)
 	if err != nil {
 		t.Error("RPC2XML conversion failed", err)
@@ -39,12 +39,12 @@ func TestRPC2XML(t *testing.T) {
 	}
 }
 
-type StructSpecialCharsRpc2Xml struct {
+type StructSpecialCharsRPC2XML struct {
 	String1 string
 }
 
 func TestRPC2XMLSpecialChars(t *testing.T) {
-	req := &StructSpecialCharsRpc2Xml{" & \" < > "}
+	req := &StructSpecialCharsRPC2XML{" & \" < > "}
 	xml, err := rpcResponse2XML(req)
 	if err != nil {
 		t.Error("RPC2XML conversion failed", err)
@@ -57,17 +57,62 @@ func TestRPC2XMLSpecialChars(t *testing.T) {
 	}
 }
 
-type StructNilRpc2Xml struct {
+type StructNilRPC2XML struct {
 	Ptr *int
 }
 
-func TestRpc2XmlNil(t *testing.T) {
-	req := &StructNilRpc2Xml{nil}
+func TestRPC2XMLNil(t *testing.T) {
+	req := &StructNilRPC2XML{nil}
 	xml, err := rpcResponse2XML(req)
 	if err != nil {
 		t.Error("RPC2XML conversion failed", err)
 	}
 	expected := "<methodResponse><params><param><value><nil/></value></param></params></methodResponse>"
+	if xml != expected {
+		t.Error("RPC2XML Special chars conversion failed")
+		t.Error("Expected", expected)
+		t.Error("Got", xml)
+	}
+}
+func TestRPC2XMLStruct(t *testing.T) {
+	req := StructNilRPC2XML{nil}
+	xml, err := rpcResponse2XML(req)
+	if err != nil {
+		t.Error("RPC2XML conversion failed", err)
+	}
+	expected := "<methodResponse><params><param><value><nil/></value></param></params></methodResponse>"
+	if xml != expected {
+		t.Error("RPC2XML Special chars conversion failed")
+		t.Error("Expected", expected)
+		t.Error("Got", xml)
+	}
+}
+
+func TestRPC2XMLMuiti(t *testing.T) {
+	arg1 := "hello"
+	arg2 := true
+	xml, err := rpcResponse2XML(&arg1, &arg2)
+	if err != nil {
+		t.Error("RPC2XML conversion failed", err)
+	}
+	expected := "<methodResponse><params><param><value><string>hello</string></value></param><param><value><boolean>1</boolean></value></param></params></methodResponse>"
+	if xml != expected {
+		t.Error("RPC2XML Special chars conversion failed")
+		t.Error("Expected", expected)
+		t.Error("Got", xml)
+	}
+
+}
+
+func TestRPC2XMLMuitiStruct(t *testing.T) {
+	arg1 := "hello"
+	arg2 := true
+
+	xml, err := rpcResponse2XML(arg1, arg2)
+	if err != nil {
+		t.Error("RPC2XML conversion failed", err)
+	}
+	expected := "<methodResponse><params><param><value><string>hello</string></value></param><param><value><boolean>1</boolean></value></param></params></methodResponse>"
 	if xml != expected {
 		t.Error("RPC2XML Special chars conversion failed")
 		t.Error("Expected", expected)

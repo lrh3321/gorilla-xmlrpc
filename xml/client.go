@@ -10,8 +10,8 @@ import (
 )
 
 // EncodeClientRequest encodes parameters for a XML-RPC client request.
-func EncodeClientRequest(method string, args interface{}) ([]byte, error) {
-	xml, err := rpcRequest2XML(method, args)
+func EncodeClientRequest(method string, args ...interface{}) ([]byte, error) {
+	xml, err := rpcRequest2XML(method, args...)
 	return []byte(xml), err
 }
 

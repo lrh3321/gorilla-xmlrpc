@@ -57,6 +57,7 @@ func (c *Codec) NewRequest(r *http.Request) rpc.CodecRequest {
 // CodecRequest
 // ----------------------------------------------------------------------------
 
+// ServerRequest Body
 type ServerRequest struct {
 	Name   xml.Name `xml:"methodCall"`
 	Method string   `xml:"methodName"`

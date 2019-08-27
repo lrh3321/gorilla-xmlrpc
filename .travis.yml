@@ -1,0 +1,19 @@
+language: go
+
+go:
+  - 1.12.x
+  - master
+
+env:
+  - GO111MODULE=on
+
+before_install:
+  - go get -v ./xml/...
+
+script:
+  - go test -v -cover -coverprofile coverage.out ./xml/...
+  - go tool cover -func coverage.out
+  - go test -race -coverprofile coverage.txt -covermode atomic ./xml/...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
